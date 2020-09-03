@@ -3,6 +3,10 @@ name = "clickhouse-sql-parser"
 version = "0.1.0"
 authors = ["Sergey Chernomorets <s.chernomorets@gmail.com>"]
 edition = "2018"
+description = "Rust parser for Clickhouse SQL dialect"
+license = "MIT"
+homepage = "https://github.com/superjobru/clickhouse-sql-parser"
+repository = "https://github.com/superjobru/clickhouse-sql-parser"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
