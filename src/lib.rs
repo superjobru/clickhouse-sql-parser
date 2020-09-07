@@ -12,7 +12,7 @@ use nom::{
     branch::alt,
     sequence::{delimited, preceded, terminated, tuple, pair},
     combinator::{map, opt, not, peek, recognize},
-    character::complete::{digit1, multispace0, multispace1, line_ending},
+    character::complete::{digit1, multispace0, multispace1, line_ending, one_of},
     character::is_alphanumeric,
     bytes::complete::{is_not, tag, tag_no_case, take, take_until, take_while1},
     multi::{fold_many0, many1, separated_list,},
@@ -276,6 +276,18 @@ fn ttl_expression(i: &[u8]) -> IResult<&[u8], &[u8]> {
 
 fn sql_expression(i: &[u8]) -> IResult<&[u8], &[u8]> {
     alt((
+        recognize(tuple((
+            sql_simple_expression,
+            multispace0,
+            one_of("+-*/<>"),
+            multispace0,
+            sql_simple_expression,
+        ))),
+        sql_simple_expression,
+    ))(i)
+}
+fn sql_simple_expression(i: &[u8]) -> IResult<&[u8], &[u8]> {
+    alt((
         sql_function,
         sql_cast_function,
         sql_tuple,
@@ -527,7 +539,7 @@ mod test {
         ];
         parse_set_for_test(type_identifier, patterns);
     }
-
+ 
     #[test]
     fn t_sql_expression() {
         let patterns = vec![
@@ -541,6 +553,15 @@ mod test {
             (
                 r#"CAST('captcha', 'Enum8(\'captcha\' = 1, \'ban\' = 2)')"#,
                 r#"CAST('captcha', 'Enum8(\'captcha\' = 1, \'ban\' = 2)')"#.to_string()
+            ),
+            ( "z>1", "z>1".to_string() ),
+            (
+                "assumeNotNull(if(1>1, murmurHash3_64(d), rand()))",
+                "assumeNotNull(if(1>1, murmurHash3_64(d), rand()))".to_string()
+            ),
+            (
+                "assumeNotNull(if(length(deviceId) > 1, murmurHash3_64(deviceId), rand()))",
+                "assumeNotNull(if(length(deviceId) > 1, murmurHash3_64(deviceId), rand()))".to_string()
             ),
         ];
         parse_set_for_test(|i| sql_expression(i)

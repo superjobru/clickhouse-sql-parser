@@ -194,3 +194,18 @@ CREATE TABLE cluster_shard1.ssr_timing (
 	ENGINE = ReplicatedMergeTree('/clickhouse/tables/cluster/cluster_shard1.ssr_timing', 'replica-21')
 	PARTITION BY toYYYYMMDD(time) ORDER BY time SETTINGS index_granularity = 8192;
 
+CREATE TABLE default.api3_http_request (
+	`eventTime` DateTime,
+	`apiVersion` LowCardinality(String),
+	`requestedApiVersion` LowCardinality(String),
+	`applicationId` LowCardinality(String),
+	`endpointId` LowCardinality(String),
+	`httpStatus` UInt16,
+	`httpStatusFamily` UInt8,
+	`duration` UInt32 COMMENT 'microseconds',
+	`applicationType` LowCardinality(Nullable(String)),
+	`applicationVersion` LowCardinality(Nullable(String)),
+	`osFamily` LowCardinality(Nullable(String)),
+	`osVersion` LowCardinality(Nullable(String)),
+	`deviceId` Nullable(String)
+) ENGINE = Distributed('nginx_cluster', '', 'api3_http_request', assumeNotNull(if(length(deviceId) > 1, murmurHash3_64(deviceId), rand())));
