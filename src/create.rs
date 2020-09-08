@@ -320,13 +320,25 @@ fn engine_distributed(i: &[u8]) -> IResult<&[u8], Engine> {
             multispace0,
             tag(")")
         )),
-        |(_,_,_,_,cluster,_,schema,_,table,_opt,_,_)| {
+        |(_,_,_,_,cluster,_,schema,_,table,sharding_opts,_,_)| {
+            let (sharding_key, policy_name) = match sharding_opts {
+                Some((_, key, None)) => (
+                    Some(str::from_utf8(key).unwrap().into()),
+                    None
+                ),
+                Some((_, key, Some((_, policy)))) => (
+                    Some(str::from_utf8(key).unwrap().into()),
+                    Some(str::from_utf8(policy).unwrap().into())
+                ),
+                _ => (None, None),
+            };
+
             Engine::Distributed(EngineDistributed {
                 cluster_name: str::from_utf8(cluster).unwrap().into(),
                 schema: str::from_utf8(schema).unwrap().into(),
                 table: str::from_utf8(table).unwrap().into(),
-                sharding_key: None, // FIXME
-                policy_name: None, // FIXME
+                sharding_key,
+                policy_name,
             })
         }
     )(i)
@@ -825,7 +837,7 @@ mod test {
                     cluster_name: "'cluster1'".into(),
                     schema: "'schema1'".into(),
                     table: "'table1'".into(),
-                    sharding_key: None,
+                    sharding_key: Some("rand()".into()),
                     policy_name: None,
                 })
             ),
@@ -835,7 +847,7 @@ mod test {
                     cluster_name: "'cluster1'".into(),
                     schema: "''".into(),
                     table: "'table1'".into(),
-                    sharding_key: None,
+                    sharding_key: Some("rand()".into()),
                     policy_name: None,
                 })
             ),
