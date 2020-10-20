@@ -219,10 +219,10 @@ impl fmt::Display for SqlType {
 }
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
-struct SqlTypeOpts {
-    ftype: SqlType,
-    nullable: bool,
-    lowcardinality: bool,
+pub struct SqlTypeOpts {
+    pub ftype: SqlType,
+    pub nullable: bool,
+    pub lowcardinality: bool,
 }
 
 impl fmt::Display for SqlTypeOpts{

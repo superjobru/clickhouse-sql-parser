@@ -552,7 +552,7 @@ fn engine_spec(i: &[u8]) -> IResult<&[u8], Engine> {
     )(i)
 }
 
-fn field_specification_opts(i: &[u8]) -> IResult<&[u8], SqlTypeOpts> {
+pub fn field_specification_opts(i: &[u8]) -> IResult<&[u8], SqlTypeOpts> {
     alt((
         map(delimited(
             tag_no_case("Nullable("),
@@ -574,7 +574,7 @@ fn field_specification_opts(i: &[u8]) -> IResult<&[u8], SqlTypeOpts> {
     ))(i)
 }
 
-fn field_specification(i: &[u8]) -> IResult<&[u8], ColumnSpecification> {
+pub fn field_specification(i: &[u8]) -> IResult<&[u8], ColumnSpecification> {
     let (remaining_input, (column, field_type, option, comment, codec, ttl)) = tuple((
         column_identifier_no_alias,
         delimited(

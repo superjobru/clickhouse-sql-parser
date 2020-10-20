@@ -1,6 +1,6 @@
 [package]
 name = "clickhouse-sql-parser"
-version = "0.1.1"
+version = "0.1.2"
 authors = ["Sergey Chernomorets <s.chernomorets@gmail.com>"]
 edition = "2018"
 description = "Rust parser for Clickhouse SQL dialect"
