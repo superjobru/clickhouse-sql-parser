@@ -209,3 +209,15 @@ CREATE TABLE default.api3_http_request (
 	`osVersion` LowCardinality(Nullable(String)),
 	`deviceId` Nullable(String)
 ) ENGINE = Distributed('nginx_cluster', '', 'api3_http_request', assumeNotNull(if(length(deviceId) > 1, murmurHash3_64(deviceId), rand())));
+
+CREATE TABLE default.EventServerLoggerRequest
+(
+    `uuid` UUID,
+    `searchId` Nullable(UUID),
+    `eventId` String,
+    `ip` UInt32,
+    `drivingLicence` Array(String),
+    `created` DateTime64(3) CODEC(DoubleDelta),
+    `loaded` DateTime64(6, 'Europe/Moscow') CODEC(DoubleDelta)
+)
+ENGINE = Distributed('nginx_cluster', '', 'EventServerRtbLoggerRequest', rand());

@@ -126,9 +126,14 @@ fn parse_file(path: &str) -> (i32, i32) {
 #[test]
 fn tables() {
     let (_ok, fail) = parse_file("tests/tables.sql");
-    let (_ok, fail) = parse_file("tests/tables2.sql");
 
-	assert_eq!(0, fail);
+    assert_eq!(0, fail);
 }
 
 
+#[test]
+fn tables2() {
+    let (_ok, fail) = parse_file("tests/tables2.sql");
+
+    assert_eq!(0, fail);
+}

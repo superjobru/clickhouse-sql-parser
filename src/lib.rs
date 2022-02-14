@@ -185,11 +185,14 @@ pub enum SqlType {
     Enum(Option<TypeSize16>, Vec<(String, i16)>),
     Date,
     DateTime(Option<String>),
+    DateTime64(u8, Option<String>),
     Float32,
     Float64,
     FixedString(usize),
     IPv4,
     IPv6,
+    UUID,
+    Array(Box<SqlType>),
 }
 
 impl fmt::Display for SqlType {
@@ -209,11 +212,15 @@ impl fmt::Display for SqlType {
             SqlType::Date => write!(f, "Date"),
             SqlType::DateTime(None) => write!(f, "DateTime"),
             SqlType::DateTime(Some(timezone)) => write!(f, "DateTime({})", timezone),
+            SqlType::DateTime64(precision, None) => write!(f, "DateTime64({})", precision),
+            SqlType::DateTime64(precision, Some(timezone)) => write!(f, "DateTime64({}, {})", precision, timezone),
             SqlType::Float32 => write!(f, "Float32"),
             SqlType::Float64 => write!(f, "Float64"),
             SqlType::FixedString(size) => write!(f, "FixedString({})", size),
             SqlType::IPv4 => write!(f, "IPv4"),
             SqlType::IPv6 => write!(f, "IPv6"),
+            SqlType::UUID => write!(f, "UUID"),
+            SqlType::Array(t) => write!(f, "Array({})", t),
         }
     }
 }
@@ -436,6 +443,27 @@ fn type_identifier(i: &[u8]) -> IResult<&[u8], SqlType> {
         map(tag_no_case("float64"), |_| SqlType::Float64),
         map(
             tuple((
+                tag_no_case("datetime64"),
+                multispace0,
+                tag("("),
+                multispace0,
+                one_of("0123456789"),
+                multispace0,
+                opt(map(
+                    tuple((
+                        tag(","),
+                        multispace0,
+                        delimited(tag("'"), take_until("'"), tag("'")),
+                    )),
+                    |(_, _, timezone)| str::from_utf8(timezone).unwrap().to_string()
+                )),
+                multispace0,
+                tag(")"),
+            )),
+            |(_, _, _, _, precision, _, timezone, _, _)| SqlType::DateTime64(precision.to_digit(10).unwrap() as u8, timezone)
+        ),
+        map(
+            tuple((
                 tag_no_case("datetime"),
                 multispace0,
                 opt(map(
@@ -461,6 +489,16 @@ fn type_identifier(i: &[u8]) -> IResult<&[u8], SqlType> {
         ),
         map(tag_no_case("ipv4"), |_| SqlType::IPv4),
         map(tag_no_case("ipv6"), |_| SqlType::IPv6),
+        map(tag_no_case("uuid"), |_| SqlType::UUID),
+        map(
+            tuple((
+                tag_no_case("array"),
+                tag("("),
+                type_identifier,
+                tag(")"),
+            )),
+            |(_,_,t,_)| SqlType::Array(Box::new(t))
+        ),
     ))(i)
 }
 
@@ -531,11 +569,24 @@ mod test {
             ( "Float32", SqlType::Float32 ),
             ( "Float64", SqlType::Float64 ),
 
+            ( "DateTime64(9)", SqlType::DateTime64(9, None) ),
+            ( "DateTime64( 3 ,'Etc/UTC'  )", SqlType::DateTime64(3, Some("Etc/UTC".into())) ),
+
             ( "DateTime", SqlType::DateTime(None) ),
             ( "DateTime('Cont/City')", SqlType::DateTime(Some("Cont/City".into())) ),
             ( "DateTime ( 'Cont/City')", SqlType::DateTime(Some("Cont/City".into())) ),
 
             ( "FixedString(3)", SqlType::FixedString(3) ),
+
+            ( "UUID", SqlType::UUID ),
+            ( "Array(FixedString(2))", SqlType::Array(Box::new(SqlType::FixedString(2))) ),
+            ( "Array(Array(Array(Int64)))", SqlType::Array(Box::new(
+                SqlType::Array(Box::new(
+                    SqlType::Array(Box::new(
+                        SqlType::Int(TypeSize::B64),
+                    )),
+                )),
+            )) ),
         ];
         parse_set_for_test(type_identifier, patterns);
     }
