@@ -34,6 +34,7 @@ use column::Column;
 use create::{
     CreateTableStatement,
     creation,
+    field_specification_opts,
 };
 
 fn eof<I: Copy + InputLength, E: ParseError<I>>(input: I) -> IResult<I, I, E> {
@@ -192,7 +193,7 @@ pub enum SqlType {
     IPv4,
     IPv6,
     UUID,
-    Array(Box<SqlType>),
+    Array(Box<SqlTypeOpts>),
 }
 
 impl fmt::Display for SqlType {
@@ -494,7 +495,7 @@ fn type_identifier(i: &[u8]) -> IResult<&[u8], SqlType> {
             tuple((
                 tag_no_case("array"),
                 tag("("),
-                type_identifier,
+                field_specification_opts,
                 tag(")"),
             )),
             |(_,_,t,_)| SqlType::Array(Box::new(t))
@@ -558,6 +559,13 @@ mod test {
 
     #[test]
     fn t_type_identifier() {
+        fn t(nullable: bool, lowcardinality: bool, t: SqlType) -> Box<SqlTypeOpts> {
+            Box::new(SqlTypeOpts {
+                ftype: t,
+                nullable: nullable,
+                lowcardinality: lowcardinality,
+            })
+        }
         let patterns = vec![
             ( "Int32", SqlType::Int(TypeSize::B32)),
             ( "UInt32", SqlType::UnsignedInt(TypeSize::B32)),
@@ -579,10 +587,12 @@ mod test {
             ( "FixedString(3)", SqlType::FixedString(3) ),
 
             ( "UUID", SqlType::UUID ),
-            ( "Array(FixedString(2))", SqlType::Array(Box::new(SqlType::FixedString(2))) ),
-            ( "Array(Array(Array(Int64)))", SqlType::Array(Box::new(
-                SqlType::Array(Box::new(
-                    SqlType::Array(Box::new(
+            ( "Array(FixedString(2))", SqlType::Array(t(false, false, SqlType::FixedString(2))) ),
+            ( "Array(Nullable(Int32))", SqlType::Array(t(true, false, SqlType::Int(TypeSize::B32))) ),
+            ( "Array(LowCardinality(String))", SqlType::Array(t(false, true, SqlType::String)) ),
+            ( "Array(Array(Array(Int64)))", SqlType::Array(t(false, false,
+                SqlType::Array(t(false, false,
+                    SqlType::Array(t(false, false,
                         SqlType::Int(TypeSize::B64),
                     )),
                 )),
