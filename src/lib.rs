@@ -226,6 +226,16 @@ impl fmt::Display for SqlType {
     }
 }
 
+impl SqlType {
+    pub fn array_from_sql_type(t: SqlType) -> SqlType {
+        SqlType::array_from_sql_type_opts(SqlTypeOpts::from_sql_type(t))
+    }
+
+    pub fn array_from_sql_type_opts(t: SqlTypeOpts) -> SqlType {
+        SqlType::Array(Box::new(t))
+    }
+}
+
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub struct SqlTypeOpts {
     pub ftype: SqlType,
@@ -244,6 +254,27 @@ impl fmt::Display for SqlTypeOpts{
     }
 }
 
+impl SqlTypeOpts {
+    pub fn from_sql_type(t: SqlType) -> SqlTypeOpts {
+        SqlTypeOpts {
+            ftype: t,
+            nullable: false,
+            lowcardinality: false,
+        }
+    }
+
+    pub fn nullable(&self) -> SqlTypeOpts {
+        let mut r = self.clone();
+        r.nullable = true;
+        r
+    }
+
+    pub fn low_carinality(&self) -> SqlTypeOpts {
+        let mut r = self.clone();
+        r.lowcardinality = true;
+        r
+    }
+}
 
 fn ttl_expression(i: &[u8]) -> IResult<&[u8], &[u8]> {
     //date + INTERVAL 1 DAY
@@ -559,13 +590,6 @@ mod test {
 
     #[test]
     fn t_type_identifier() {
-        fn t(nullable: bool, lowcardinality: bool, t: SqlType) -> Box<SqlTypeOpts> {
-            Box::new(SqlTypeOpts {
-                ftype: t,
-                nullable: nullable,
-                lowcardinality: lowcardinality,
-            })
-        }
         let patterns = vec![
             ( "Int32", SqlType::Int(TypeSize::B32)),
             ( "UInt32", SqlType::UnsignedInt(TypeSize::B32)),
@@ -587,16 +611,20 @@ mod test {
             ( "FixedString(3)", SqlType::FixedString(3) ),
 
             ( "UUID", SqlType::UUID ),
-            ( "Array(FixedString(2))", SqlType::Array(t(false, false, SqlType::FixedString(2))) ),
-            ( "Array(Nullable(Int32))", SqlType::Array(t(true, false, SqlType::Int(TypeSize::B32))) ),
-            ( "Array(LowCardinality(String))", SqlType::Array(t(false, true, SqlType::String)) ),
-            ( "Array(Array(Array(Int64)))", SqlType::Array(t(false, false,
-                SqlType::Array(t(false, false,
-                    SqlType::Array(t(false, false,
+            ( "Array(FixedString(2))", SqlType::array_from_sql_type(SqlType::FixedString(2)) ),
+            ( "Array(Nullable(Int32))", SqlType::array_from_sql_type_opts(
+                SqlTypeOpts::from_sql_type(SqlType::Int(TypeSize::B32)).nullable()
+            ) ),
+            ( "Array(LowCardinality(String))", SqlType::array_from_sql_type_opts(
+                SqlTypeOpts::from_sql_type(SqlType::String).low_carinality()
+            ) ),
+            ( "Array(Array(Array(Int64)))", SqlType::array_from_sql_type(
+                SqlType::array_from_sql_type(
+                    SqlType::array_from_sql_type(
                         SqlType::Int(TypeSize::B64),
-                    )),
-                )),
-            )) ),
+                    ),
+                ),
+            ) ),
         ];
         parse_set_for_test(type_identifier, patterns);
     }
