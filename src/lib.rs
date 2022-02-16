@@ -323,6 +323,7 @@ fn sql_expression(i: &[u8]) -> IResult<&[u8], &[u8]> {
             sql_simple_expression,
         ))),
         sql_simple_expression,
+        sql_array,
     ))(i)
 }
 fn sql_simple_expression(i: &[u8]) -> IResult<&[u8], &[u8]> {
@@ -348,6 +349,14 @@ fn sql_tuple(i: &[u8]) -> IResult<&[u8], &[u8]> {
         tag("("),
         separated_list(ws_sep_comma, sql_expression),
         tag(")"),
+    )))(i)
+}
+
+fn sql_array(i: &[u8]) -> IResult<&[u8], &[u8]> {
+    recognize(tuple((
+        tag("["),
+        separated_list(ws_sep_comma, sql_expression),
+        tag("]"),
     )))(i)
 }
 
@@ -651,6 +660,14 @@ mod test {
             (
                 "assumeNotNull(if(length(deviceId) > 1, murmurHash3_64(deviceId), rand()))",
                 "assumeNotNull(if(length(deviceId) > 1, murmurHash3_64(deviceId), rand()))".to_string()
+            ),
+            (
+                "[]",
+                "[]".to_string()
+            ),
+            (
+                "[1, 2, 3]",
+                "[1, 2, 3]".to_string()
             ),
         ];
         parse_set_for_test(|i| sql_expression(i)

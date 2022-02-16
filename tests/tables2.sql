@@ -217,6 +217,7 @@ CREATE TABLE default.EventServerLoggerRequest
     `eventId` String,
     `ip` UInt32,
     `drivingLicence` Array(String),
+    `keywordIds` Array(UInt32) DEFAULT [] CODEC(T64),
     `created` DateTime64(3) CODEC(DoubleDelta),
     `loaded` DateTime64(6, 'Europe/Moscow') CODEC(DoubleDelta)
 )
