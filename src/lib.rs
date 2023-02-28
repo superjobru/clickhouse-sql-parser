@@ -34,6 +34,7 @@ use column::Column;
 use create::{
     CreateTableStatement,
     creation,
+    field_specification_opts,
 };
 
 fn eof<I: Copy + InputLength, E: ParseError<I>>(input: I) -> IResult<I, I, E> {
@@ -185,11 +186,14 @@ pub enum SqlType {
     Enum(Option<TypeSize16>, Vec<(String, i16)>),
     Date,
     DateTime(Option<String>),
+    DateTime64(u8, Option<String>),
     Float32,
     Float64,
     FixedString(usize),
     IPv4,
     IPv6,
+    UUID,
+    Array(Box<SqlTypeOpts>),
 }
 
 impl fmt::Display for SqlType {
@@ -209,12 +213,26 @@ impl fmt::Display for SqlType {
             SqlType::Date => write!(f, "Date"),
             SqlType::DateTime(None) => write!(f, "DateTime"),
             SqlType::DateTime(Some(timezone)) => write!(f, "DateTime({})", timezone),
+            SqlType::DateTime64(precision, None) => write!(f, "DateTime64({})", precision),
+            SqlType::DateTime64(precision, Some(timezone)) => write!(f, "DateTime64({}, {})", precision, timezone),
             SqlType::Float32 => write!(f, "Float32"),
             SqlType::Float64 => write!(f, "Float64"),
             SqlType::FixedString(size) => write!(f, "FixedString({})", size),
             SqlType::IPv4 => write!(f, "IPv4"),
             SqlType::IPv6 => write!(f, "IPv6"),
+            SqlType::UUID => write!(f, "UUID"),
+            SqlType::Array(t) => write!(f, "Array({})", t),
         }
+    }
+}
+
+impl SqlType {
+    pub fn array_from_sql_type(t: SqlType) -> SqlType {
+        SqlType::array_from_sql_type_opts(SqlTypeOpts::from_sql_type(t))
+    }
+
+    pub fn array_from_sql_type_opts(t: SqlTypeOpts) -> SqlType {
+        SqlType::Array(Box::new(t))
     }
 }
 
@@ -236,6 +254,27 @@ impl fmt::Display for SqlTypeOpts{
     }
 }
 
+impl SqlTypeOpts {
+    pub fn from_sql_type(t: SqlType) -> SqlTypeOpts {
+        SqlTypeOpts {
+            ftype: t,
+            nullable: false,
+            lowcardinality: false,
+        }
+    }
+
+    pub fn nullable(&self) -> SqlTypeOpts {
+        let mut r = self.clone();
+        r.nullable = true;
+        r
+    }
+
+    pub fn low_carinality(&self) -> SqlTypeOpts {
+        let mut r = self.clone();
+        r.lowcardinality = true;
+        r
+    }
+}
 
 fn ttl_expression(i: &[u8]) -> IResult<&[u8], &[u8]> {
     //date + INTERVAL 1 DAY
@@ -284,6 +323,7 @@ fn sql_expression(i: &[u8]) -> IResult<&[u8], &[u8]> {
             sql_simple_expression,
         ))),
         sql_simple_expression,
+        sql_array,
     ))(i)
 }
 fn sql_simple_expression(i: &[u8]) -> IResult<&[u8], &[u8]> {
@@ -309,6 +349,14 @@ fn sql_tuple(i: &[u8]) -> IResult<&[u8], &[u8]> {
         tag("("),
         separated_list(ws_sep_comma, sql_expression),
         tag(")"),
+    )))(i)
+}
+
+fn sql_array(i: &[u8]) -> IResult<&[u8], &[u8]> {
+    recognize(tuple((
+        tag("["),
+        separated_list(ws_sep_comma, sql_expression),
+        tag("]"),
     )))(i)
 }
 
@@ -436,6 +484,27 @@ fn type_identifier(i: &[u8]) -> IResult<&[u8], SqlType> {
         map(tag_no_case("float64"), |_| SqlType::Float64),
         map(
             tuple((
+                tag_no_case("datetime64"),
+                multispace0,
+                tag("("),
+                multispace0,
+                one_of("0123456789"),
+                multispace0,
+                opt(map(
+                    tuple((
+                        tag(","),
+                        multispace0,
+                        delimited(tag("'"), take_until("'"), tag("'")),
+                    )),
+                    |(_, _, timezone)| str::from_utf8(timezone).unwrap().to_string()
+                )),
+                multispace0,
+                tag(")"),
+            )),
+            |(_, _, _, _, precision, _, timezone, _, _)| SqlType::DateTime64(precision.to_digit(10).unwrap() as u8, timezone)
+        ),
+        map(
+            tuple((
                 tag_no_case("datetime"),
                 multispace0,
                 opt(map(
@@ -461,6 +530,16 @@ fn type_identifier(i: &[u8]) -> IResult<&[u8], SqlType> {
         ),
         map(tag_no_case("ipv4"), |_| SqlType::IPv4),
         map(tag_no_case("ipv6"), |_| SqlType::IPv6),
+        map(tag_no_case("uuid"), |_| SqlType::UUID),
+        map(
+            tuple((
+                tag_no_case("array"),
+                tag("("),
+                field_specification_opts,
+                tag(")"),
+            )),
+            |(_,_,t,_)| SqlType::Array(Box::new(t))
+        ),
     ))(i)
 }
 
@@ -531,11 +610,30 @@ mod test {
             ( "Float32", SqlType::Float32 ),
             ( "Float64", SqlType::Float64 ),
 
+            ( "DateTime64(9)", SqlType::DateTime64(9, None) ),
+            ( "DateTime64( 3 ,'Etc/UTC'  )", SqlType::DateTime64(3, Some("Etc/UTC".into())) ),
+
             ( "DateTime", SqlType::DateTime(None) ),
             ( "DateTime('Cont/City')", SqlType::DateTime(Some("Cont/City".into())) ),
             ( "DateTime ( 'Cont/City')", SqlType::DateTime(Some("Cont/City".into())) ),
 
             ( "FixedString(3)", SqlType::FixedString(3) ),
+
+            ( "UUID", SqlType::UUID ),
+            ( "Array(FixedString(2))", SqlType::array_from_sql_type(SqlType::FixedString(2)) ),
+            ( "Array(Nullable(Int32))", SqlType::array_from_sql_type_opts(
+                SqlTypeOpts::from_sql_type(SqlType::Int(TypeSize::B32)).nullable()
+            ) ),
+            ( "Array(LowCardinality(String))", SqlType::array_from_sql_type_opts(
+                SqlTypeOpts::from_sql_type(SqlType::String).low_carinality()
+            ) ),
+            ( "Array(Array(Array(Int64)))", SqlType::array_from_sql_type(
+                SqlType::array_from_sql_type(
+                    SqlType::array_from_sql_type(
+                        SqlType::Int(TypeSize::B64),
+                    ),
+                ),
+            ) ),
         ];
         parse_set_for_test(type_identifier, patterns);
     }
@@ -562,6 +660,14 @@ mod test {
             (
                 "assumeNotNull(if(length(deviceId) > 1, murmurHash3_64(deviceId), rand()))",
                 "assumeNotNull(if(length(deviceId) > 1, murmurHash3_64(deviceId), rand()))".to_string()
+            ),
+            (
+                "[]",
+                "[]".to_string()
+            ),
+            (
+                "[1, 2, 3]",
+                "[1, 2, 3]".to_string()
             ),
         ];
         parse_set_for_test(|i| sql_expression(i)
